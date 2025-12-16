@@ -1,5 +1,106 @@
+const CONSTELLATION_NAMES = {
+  And: "Andromeda",
+  Ant: "Antlia",
+  Aps: "Apus",
+  Aql: "Aquila",
+  Aqr: "Aquarius",
+  Ara: "Ara",
+  Ari: "Aries",
+  Aur: "Auriga",
+  Boo: "Boötes",
+  CMa: "Canis Major",
+  CMi: "Canis Minor",
+  CVn: "Canes Venatici",
+  Cae: "Caelum",
+  Cam: "Camelopardalis",
+  Cap: "Capricornus",
+  Car: "Carina",
+  Cas: "Cassiopeia",
+  Cen: "Centaurus",
+  Cep: "Cepheus",
+  Cet: "Cetus",
+  Cha: "Chamaeleon",
+  Cir: "Circinus",
+  Cnc: "Cancer",
+  Col: "Columba",
+  Com: "Coma Berenices",
+  CrA: "Corona Australis",
+  CrB: "Corona Borealis",
+  Crt: "Crater",
+  Cru: "Crux",
+  Crv: "Corvus",
+  Cyg: "Cygnus",
+  Del: "Delphinus",
+  Dor: "Dorado",
+  Dra: "Draco",
+  Equ: "Equuleus",
+  Eri: "Eridanus",
+  For: "Fornax",
+  Gem: "Gemini",
+  Gru: "Grus",
+  Her: "Hercules",
+  Hor: "Horologium",
+  Hya: "Hydra",
+  Hyi: "Hydrus",
+  Ind: "Indus",
+  LMi: "Leo Minor",
+  Lac: "Lacerta",
+  Leo: "Leo",
+  Lep: "Lepus",
+  Lib: "Libra",
+  Lup: "Lupus",
+  Lyn: "Lynx",
+  Lyr: "Lyra",
+  Men: "Mensa",
+  Mic: "Microscopium",
+  Mon: "Monoceros",
+  Mus: "Musca",
+  Nor: "Norma",
+  Oct: "Octans",
+  Oph: "Ophiuchus",
+  Ori: "Orion",
+  Pav: "Pavo",
+  Peg: "Pegasus",
+  Per: "Perseus",
+  Phe: "Phoenix",
+  Pic: "Pictor",
+  PsA: "Piscis Austrinus",
+  Psc: "Pisces",
+  Pup: "Puppis",
+  Pyx: "Pyxis",
+  Ret: "Reticulum",
+  Scl: "Sculptor",
+  Sco: "Scorpius",
+  Sct: "Scutum",
+  Ser: "Serpens",
+  Sex: "Sextans",
+  Sge: "Sagitta",
+  Sgr: "Sagittarius",
+  Tau: "Taurus",
+  Tel: "Telescopium",
+  TrA: "Triangulum Australe",
+  Tri: "Triangulum",
+  Tuc: "Tucana",
+  UMa: "Ursa Major",
+  UMi: "Ursa Minor",
+  Vel: "Vela",
+  Vir: "Virgo",
+  Vol: "Volans",
+  Vul: "Vulpecula"
+};
+
+
+
+
+
+
+
+
+
+
 const canvas = document.getElementById("sky");
 const ctx = canvas.getContext("2d");
+
 
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
@@ -107,24 +208,91 @@ fetch("constellations.json")
 
 
 
+const observer = {
+  lat: 44.4949 * Math.PI / 180,
+  lon: 11.3426 * Math.PI / 180
+};
+function getLocalSiderealTime(date, lonRad) {
+  const JD = date / 86400000 + 2440587.5;
+  const D = JD - 2451545.0;
+
+  let GMST = 280.46061837
+    + 360.98564736629 * D;
+
+  GMST = ((GMST % 360) + 360) % 360;
+
+  const LST = GMST * Math.PI / 180 + lonRad;
+  return LST;
+}
+
+
+function raDecToAltAz(ra, dec, lat, lst) {
+  const H = lst - ra; // hour angle
+
+  const sinAlt =
+    Math.sin(dec) * Math.sin(lat) +
+    Math.cos(dec) * Math.cos(lat) * Math.cos(H);
+
+  const alt = Math.asin(sinAlt);
+
+  const cosAz =
+    (Math.sin(dec) - Math.sin(alt) * Math.sin(lat)) /
+    (Math.cos(alt) * Math.cos(lat));
+
+  let az = Math.acos(Math.min(1, Math.max(-1, cosAz)));
+
+  if (Math.sin(H) > 0) az = 2 * Math.PI - az;
+
+  return { alt, az };
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+let projectedStars = [];
+
+
 
 /* ===============================
    Projection (dome, no edges)
 ================================ */
 function projectStar(s) {
-  // Convert RA/DEC to direction vector
-  const x = Math.cos(s.dec) * Math.cos(s.ra);
-  const y = Math.cos(s.dec) * Math.sin(s.ra);
-  const z = Math.sin(s.dec);
+  const lst = getLocalSiderealTime(Date.now(), observer.lon);
+  const { alt, az } = raDecToAltAz(
+    s.ra,
+    s.dec,
+    observer.lat,
+    lst
+  );
 
-  // Apply camera yaw
+  // Below horizon → invisible
+  if (alt <= 0) return null;
+
+  // Convert Alt/Az to direction vector
+  // Planetarium convention:
+  // x = south, y = east, z = up
+  let x = Math.cos(alt) * Math.cos(az);
+  let y = Math.cos(alt) * Math.sin(az);
+  let z = Math.sin(alt);
+
+  // Apply camera yaw (left-right)
   const cy = Math.cos(camera.yaw);
   const sy = Math.sin(camera.yaw);
   let dx = x * cy - y * sy;
   let dy = x * sy + y * cy;
   let dz = z;
 
-  // Apply camera pitch (planetarium mode)
+  // Apply camera pitch (up-down)
   const cp = Math.cos(camera.pitch);
   const sp = Math.sin(camera.pitch);
   const dz2 = dz * cp + dx * sp;
@@ -137,9 +305,11 @@ function projectStar(s) {
 
   return {
     x: window.innerWidth / 2 + (dy / dz) * f,
-    y: window.innerHeight / 2 - (dx / dz) * f
+    y: window.innerHeight / 2 - (dx / dz) * f,
+    alt
   };
 }
+
 
 
 
@@ -221,22 +391,25 @@ function drawSky() {
   drawBackground();
 
   
+  projectedStars.length = 0;
 
   for (const s of stars) {
     const p = projectStar(s);
     if (!p) continue;
 
+    projectedStars.push({
+      x: p.x,
+      y: p.y,
+      star: s
+    });
+
     ctx.beginPath();
-    // const extinction = Math.pow(Math.sin(s.alt), 0.4);
-    // const extinction = Math.pow(Math.max(0.1, dz), 0.4);
-
     ctx.fillStyle = `rgba(255,255,255,${s.a})`;
-
-
     const r = Math.max(0.6, 1.5 - s.mag);
     ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
     ctx.fill();
   }
+
 
 
 
@@ -263,6 +436,22 @@ function drawSky() {
   }
 
 
+
+  const hoveredStar = findHoveredStar();
+  const hoveredConstellation = hoveredStar
+    ? null
+    : findHoveredConstellation();
+
+  if (hoveredStar || hoveredConstellation) {
+    drawTooltip(
+      mouse.x + 12,
+      mouse.y + 12,
+      hoveredStar
+        ? `${hoveredStar.name ?? "Star"}\nMag ${hoveredStar.mag.toFixed(2)}`
+        : hoveredConstellation
+    );
+  }
+
 }
 
   /* ===============================
@@ -275,6 +464,18 @@ function drawSky() {
 
 
   let lastY = 0;
+
+  const mouse = {
+    x: 0,
+    y: 0
+  };
+
+  canvas.addEventListener("mousemove", e => {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - rect.left;
+    mouse.y = e.clientY - rect.top;
+  });
+
 
   canvas.addEventListener("mousedown", e => {
     dragging = true;
@@ -347,3 +548,89 @@ function drawSky() {
   }
 
   requestAnimationFrame(animate);
+
+
+
+
+
+  function findHoveredStar() {
+  let closest = null;
+  let minDist = 8; // pixels
+
+  for (const p of projectedStars) {
+    const dx = p.x - mouse.x;
+    const dy = p.y - mouse.y;
+    const d = Math.sqrt(dx * dx + dy * dy);
+
+    if (d < minDist) {
+      minDist = d;
+      closest = p.star;
+    }
+  }
+  return closest;
+}
+function distToSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const t = Math.max(0, Math.min(1,
+    ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)
+  ));
+  const cx = ax + t * dx;
+  const cy = ay + t * dy;
+  return Math.hypot(px - cx, py - cy);
+}
+function findHoveredConstellation() {
+  const threshold = 5;
+
+  for (const abr in constellations) {
+    for (const [a, b] of constellations[abr]) {
+      const sa = starById[a];
+      const sb = starById[b];
+      if (!sa || !sb) continue;
+
+      const pa = projectStar(sa);
+      const pb = projectStar(sb);
+      if (!pa || !pb) continue;
+
+      if (distToSegment(mouse.x, mouse.y, pa.x, pa.y, pb.x, pb.y) < threshold) {
+        return CONSTELLATION_NAMES[abr] || abr;
+      }
+    }
+  }
+  return null;
+}
+
+
+
+function drawTooltip(x, y, text) {
+  const lines = text.split("\n");
+  ctx.font = "12px system-ui";
+  ctx.textBaseline = "top";
+
+  const padding = 8;
+  const lineHeight = 16;
+  const width = Math.max(
+    ...lines.map(l => ctx.measureText(l).width)
+  ) + padding * 2;
+  const height = lines.length * lineHeight + padding * 2;
+
+  // glow
+  ctx.shadowColor = "rgba(200,220,255,0.4)";
+  ctx.shadowBlur = 10;
+
+  ctx.fillStyle = "rgba(0,0,0,0.75)";
+  ctx.strokeStyle = "rgba(180,200,255,0.35)";
+  ctx.lineWidth = 1;
+
+  ctx.beginPath();
+  ctx.roundRect(x, y, width, height, 6);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = "#eaeef5";
+  lines.forEach((l, i) =>
+    ctx.fillText(l, x + padding, y + padding + i * lineHeight)
+  );
+}
