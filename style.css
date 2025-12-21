@@ -21,7 +21,6 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-
   font: 600 1.6rem system-ui;
   letter-spacing: 0.08em;
   color: #eaeef5;
