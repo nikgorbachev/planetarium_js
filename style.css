@@ -10,3 +10,32 @@ html, body {
   width: 100vw;
   height: 100vh;
 }
+
+#wish-modal {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 30rem;
+  height: 20rem;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  font: 600 1.6rem system-ui;
+  letter-spacing: 0.08em;
+  color: #eaeef5;
+
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(180, 200, 255, 0.35);
+  border-radius: 16px;
+  backdrop-filter: blur(8px);
+
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+#wish-modal.show {
+  opacity: 1;
+}

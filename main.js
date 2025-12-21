@@ -124,6 +124,14 @@ const story = {
   phase: "idle" // "zoom-in" → "hold" → "zoom-out"
 };
 
+const wish = {
+  active: false,
+  showUntil: 0,
+  shootingStar: null,
+  timer: null
+};
+
+
 
 const visitedConstellations = [];
 const MAX_VISITED = 6; // tweak: how much memory the story has
@@ -581,8 +589,11 @@ function drawSky() {
     if (story.enabled) {
       advanceStory();
       storyTimer = setInterval(advanceStory, STORY_INTERVAL);
+      scheduleNextWish();
     } else {
       clearInterval(storyTimer);
+      clearTimeout(wish.timer);
+      wish.active = false;
       story.activeConstellation = null;
     }
   });
@@ -696,30 +707,37 @@ function getVisibleConstellationsInView() {
   }
 
 
-  function animate(time) {
+  
+  
 
+
+  function animate(time) {
+    const dt = (time - lastTime) / 1000;
+    lastTime = time;
+
+    // camera & sky
     if (story.enabled && story.activeConstellation) {
-      const targetFov = BASE_FOV * ZOOM_FACTOR;
-      camera.fov = lerp(camera.fov, targetFov, ZOOM_SPEED);
+      camera.fov = lerp(camera.fov, BASE_FOV * ZOOM_FACTOR, ZOOM_SPEED);
     } else {
       camera.fov = lerp(camera.fov, BASE_FOV, ZOOM_SPEED);
     }
 
-
-    const dt = (time - lastTime) / 1000;
-    lastTime = time;
-
-    camera.yaw += dt * 0.02;// very slow celestial drift
-
+    camera.yaw += dt * 0.02;
     atmosphere.x *= 0.98;
     atmosphere.y *= 0.98;
-
 
     currentLST = getLocalSiderealTime(Date.now(), observer.lon);
 
     drawSky();
+    drawShootingStar(dt);
+
     requestAnimationFrame(animate);
   }
+
+
+
+
+
 
   function advanceStory() {
     if (!story.enabled) return;
@@ -876,3 +894,90 @@ function pickRandomVisibleConstellation() {
 
 
 
+
+
+
+function scheduleNextWish() {
+  if (!story.enabled) return;
+
+  const delay =
+    180_000 + Math.random() * 120_000; // 3–5 minutes
+
+  wish.timer = setTimeout(triggerWish, delay);
+}
+
+function triggerWish() {
+  if (!story.enabled || wish.active) return;
+
+  wish.active = true;
+
+  const modal = document.getElementById("wish-modal");
+  modal.classList.add("show");
+
+  // hide modal after 2s
+  setTimeout(() => {
+    modal.classList.remove("show");
+
+    // shooting star shortly after
+    setTimeout(spawnShootingStar, 500);
+  }, 2000);
+
+  // schedule next one
+  scheduleNextWish();
+}
+
+
+window.addEventListener("keydown", e => {
+  if (e.code === "Space" && story.enabled) {
+    e.preventDefault();
+    triggerWish();
+  }
+});
+
+
+function spawnShootingStar() {
+  const angle = Math.random() * Math.PI * 2;
+  const length = 800 + Math.random() * 400;
+  const speed = 1200;
+
+  const cx = window.innerWidth / 2;
+  const cy = window.innerHeight / 2;
+
+  wish.shootingStar = {
+    x: cx + Math.cos(angle) * 600,
+    y: cy + Math.sin(angle) * 600,
+    dx: -Math.cos(angle),
+    dy: -Math.sin(angle),
+    life: length / speed,
+    age: 0,
+    speed
+  };
+}
+
+
+function drawShootingStar(dt) {
+  const s = wish.shootingStar;
+  if (!s) return;
+
+  s.age += dt;
+  if (s.age > s.life) {
+    wish.shootingStar = null;
+    wish.active = false;
+    return;
+  }
+
+  const t = s.age / s.life;
+  const alpha = Math.sin(Math.PI * (1 - t));
+
+  const x1 = s.x + s.dx * s.speed * s.age;
+  const y1 = s.y + s.dy * s.speed * s.age;
+  const x2 = x1 - s.dx * 120;
+  const y2 = y1 - s.dy * 120;
+
+  ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+}
